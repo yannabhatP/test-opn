@@ -1,34 +1,30 @@
 
 import express,{Request, Response} from "express";
 import Omise from "omise";
+import cors from "cors";
+import bodyParser from "body-parser";
+import { Server } from "socket.io";
+import { createServer } from "node:http";
+import dotenv from "dotenv"
+
 const app = express();
+
+dotenv.config()
+
+
 const port : number = 3000;
 
 const omise = Omise({
-    publicKey : "PUBLIC OPN KEY",
-    secretKey : "SECRET OPN KEY"
+    publicKey : process.env.OPN_PKEY,
+    secretKey : process.env.OPN_SKEY
 })
 
 
-app.use("/",express.static("public"))
 
+app.use(bodyParser.urlencoded({ extended : false}))
+app.use(bodyParser.json())
 
-app.get(
-    "/promptpay/:id",
-    async(req : Request, res : Response) => {
-        // console.log(req.params?.id)
-        // res.send("promptpay")
-        const result = await omise.charges.create({
-            amount : 10000,
-            currency : "THB",
-            source : req.params?.id
-        })
-
-
-        res.json(result)
-    }
-)
-
+app.use(cors())
 
 app.get(
     "/hello",
@@ -37,14 +33,52 @@ app.get(
     }
 )
 
-
-
-
-
-
-app.listen(
-    port,
-    ()=> {
-        console.log(`App Listening at http://localhost:${port}`)
+app.post(
+    "/charge",
+    async( req : Request, res : Response) => {
+        const { amount, currency, type, source }  = req.body
+        const result = await omise.charges.create(
+            {
+                amount,
+                currency,
+                source
+            }
+        )
+        res.json(result)
     }
 )
+
+const httpServer = createServer(app)
+const io = new Server(httpServer,{ cors : { origin : "*"}})
+
+io.on("connection",()=>{
+})
+
+app.post(
+    "/opn-hook",
+    (req : Request , _ : Response) => {
+        // console.log(req.body.data)
+        let val  : any = 
+        {
+            source : req.body.data.source.id,
+            paid : req.body.data.paid,
+            paidAt : req.body.data.paidAt
+        }
+
+        
+        if(val.paid)
+            io.emit(val.source,val)
+    }
+)
+
+
+
+httpServer.listen(port,()=>console.log(`App Listening at http://localhost:${port}`))
+
+
+// app.listen(
+//     port,
+//     ()=> {
+//         console.log(`App Listening at http://localhost:${port}`)
+//     }
+// )
